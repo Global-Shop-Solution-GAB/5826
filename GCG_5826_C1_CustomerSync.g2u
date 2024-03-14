@@ -1,0 +1,558 @@
+Program.Sub.Preflight.Start
+v.Global.sCustomer.Declare(String)
+
+'this is a global setting in the maintenance program for ARC 5826 where you can set the default pricebook for all customers created in ConfigureOne from the GSS Integration.
+v.Global.sDefPriceBook.Declare(String,"203385211")
+'credentials for API
+v.Global.sUser.Declare(String)
+v.Global.sPW.Declare(String)
+v.Global.sURL.Declare(String)
+v.Global.sMethURI.Declare(String)
+
+'customer sync threshold (days)
+v.Global.sCustSyncThrshold.Declare(Long)
+
+'for logging gab errors
+v.Global.sErrorMsg.Declare(String)
+v.Global.sPIDFile.Declare(String)
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sFile.Declare(String)
+v.Local.bCheck.Declare(Boolean)
+v.Local.i.declare(Long)
+v.Local.smsg.Declare(String)
+	'coded by SFF 01/21/2020
+	'this program syncs up the customer master from Global Shop with ConfigureOne
+	' GSS is the driver of customer master and all customer should be sourced from the GSS ERP and Sent to ConfigureOne via API
+	'Four Modes: (1. Customer Masster Sync Service via Online Update, 2. Customer Master > Save Event,  3. CRM Customer Save Event, and 4. Additional Ship-to Save event)
+	'ALL HOOKS ASYNC so it doesnt hold up user. we are not posting back to screen so it is fine to run async. 
+	
+	f.ODBC.Connection!con.opencompanyconnection
+
+	
+	'just a popup to let them know its working
+	f.Intrinsic.UI.InvokeWaitDialog("Syncing to ConfigureOne...","Syncing to ConfigureOne...")
+	
+	'load global settings
+	f.Intrinsic.Control.CallSub(getSettings)
+	
+	'when service is running, we are polling for list of customers we need to sync.
+	f.Intrinsic.Control.If(v.Caller.Hook,=,38120)
+		'possibly insert logic here to notify admin of error logs existing daily. need to keep track of notification last sent by day (keep it simple)
+	
+		'track if prog running async on OLU Hook. 
+		f.Intrinsic.Control.CallSub(isRunning)
+
+		'get new/udpated customer masters since last interval run
+		f.Intrinsic.Control.CallSub(getCustomerList)
+		'then for each customer, perform additional queries to retrieve data, compile and post via SOAP.
+		f.Intrinsic.Control.For(v.Local.i,0,v.DataTable.customerList.RowCount--,1)
+			v.Global.sCustomer.Set(v.DataTable.customerList(v.Local.i).CUSTOMER!FieldValTrim)
+			f.Intrinsic.Control.CallSub(getCustomerData)
+		f.Intrinsic.Control.Next(v.Local.i)
+		
+		'show that process is over for check in the isRunning sub
+		f.Intrinsic.File.DeleteFile(v.Global.sPIDFile)
+	
+	'Post Save Hook on Accounts Receivable > Customers New/Open
+	f.Intrinsic.Control.ElseIf(v.Caller.Hook,=,38130)
+
+		'possibly insert logic here to notify admin of error logs existing daily. need to keep track of notification last sent by day (keep it simple)
+	
+		'track if prog running async on OLU Hook. 
+		f.Intrinsic.Control.CallSub(isRunning)
+
+		'get new/udpated customer masters since last interval run
+		f.Intrinsic.Control.CallSub(getCustomerList)
+		'then for each customer, perform additional queries to retrieve data, compile and post via SOAP.
+		f.Intrinsic.Control.For(v.Local.i,0,v.DataTable.customerList.RowCount--,1)
+			v.Global.sCustomer.Set(v.DataTable.customerList(v.Local.i).CUSTOMER!FieldValTrim)
+			f.Intrinsic.Control.CallSub(getCustomerData)
+		f.Intrinsic.Control.Next(v.Local.i)
+		
+		'show that process is over for check in the isRunning sub
+		f.Intrinsic.File.DeleteFile(v.Global.sPIDFile)
+	
+	'Post Save Hook on Accounts Receivable > Customers New/Open
+	f.Intrinsic.Control.ElseIf(v.Caller.Hook,=,14385)
+		'set customer# from passed variable and then post data to C1
+		v.Global.sCustomer.Set(v.Passed.000002.Trim)
+		f.Intrinsic.Control.CallSub(getCustomerData)
+			
+	'post save on CRM Company save
+	f.Intrinsic.Control.ElseIf(v.Caller.Hook,=,51027)
+		'set global customer from CRM Save Event
+		v.Global.sCustomer.Set(V.Passed.DATA-CRM-CompID.Trim)
+		f.Intrinsic.Control.CallSub(getCustomerData)
+		
+	'post save on adding an additional ship-to address for customer.	
+	f.Intrinsic.Control.ElseIf(v.Caller.Hook,=,14443)
+		'set global customer from ship-to save
+		v.Global.sCustomer.Set(V.Passed.000001.Trim)
+		f.Intrinsic.Control.CallSub(getCustomerData)
+		
+	'save off of user/notes field in CRM for customer. 
+	f.Intrinsic.Control.ElseIf(v.Caller.Hook,=,51031)
+		'set customer from USer/Notes field tied to customer in crm.
+		v.Global.sCustomer.Set(V.Passed.DATA-CRM-CompID.Trim)
+		f.Intrinsic.Control.CallSub(getCustomerData)
+
+	F.Intrinsic.Control.Endif
+	
+	f.ODBC.Connection!con.Close
+	
+	f.Intrinsic.UI.CloseWaitDialog
+
+	F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project","||","||","Subroutine: ",V.Ambient.CurrentSubroutine,"||","Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	v.Global.sErrorMsg.Set(v.Local.sError)
+	f.Intrinsic.Control.Callsub(LogError)
+	
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.Main.End
+
+Program.Sub.getCustomerData.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare(String," ")
+	v.Local.smsg.Declare(String)
+	v.Local.sSQL.Declare(String)
+	v.Local.iRet.Declare(Long)
+	v.Local.iStart.Declare(Long)
+	v.Local.iEnd.Declare(Long)
+	v.Local.sTemp.Declare(String)
+	v.Local.sTempAddress.Declare(String)
+	v.Local.sTempFile.Declare(String)
+	v.Local.sTemp2.Declare(String)
+	'for SOAP POST 
+	V.Local.sFilepath.Declare(string)
+	V.local.sFaultCode.Declare(String)
+	V.local.sFaultString.Declare(String)
+	v.Local.bCheck.Declare(Boolean)
+	
+	f.Intrinsic.String.Build("{0}\{1}SoapPost.txt",v.Caller.FilesDir,v.Caller.Terminal,v.Local.sFilepath)
+			
+	'check for file existing and delete before transaction
+	f.Intrinsic.File.Exists(v.Local.sFilepath,v.Local.bCheck)
+	f.Intrinsic.Control.If(v.Local.bCheck,=,True)
+		f.Intrinsic.File.DeleteFile(v.Local.sFilepath)
+	f.Intrinsic.Control.EndIf
+	
+	'this sub uses the global variable for sCustomer that is set depending on how its called in the main
+	
+	'example of SOAP POST for processCustomer Method, 
+	'NOTE!!!   the "<Address></Address>" section is repeatable.
+	'<ACCOUNT_NUM>2345630</ACCOUNT_NUM><CUST_REF_NUM>782377682</CUST_REF_NUM><EMAIL_ADDRESS>test@gmail.com</EMAIL_ADDRESS><CUST_NAME>Nike</CUST_NAME><CUST_LOGO></CUST_LOGO><ACCOUNT_BALANCE>0.0</ACCOUNT_BALANCE><CREDIT_LIMIT>100.0</CREDIT_LIMIT><PAYMENT_TERMS></PAYMENT_TERMS><SHIP_VIA></SHIP_VIA><SHIPPING_TERMS></SHIPPING_TERMS><DISCOUNT_AMOUNT>0</DISCOUNT_AMOUNT><ENFORCE_CREDIT_LIMIT_IND>N</ENFORCE_CREDIT_LIMIT_IND><PRICE_BOOK>0</PRICE_BOOK><WEBSITE></WEBSITE><UDF1></UDF1><UDF2></UDF2><UDF3></UDF3><UDF4></UDF4><UDF5></UDF5><UDF6></UDF6><UDF7></UDF7><UDF8></UDF8><UDF9></UDF9><UDF10></UDF10><ERP_REFERENCE_NUM></ERP_REFERENCE_NUM><CRM_REFERENCE_NUM></CRM_REFERENCE_NUM><CUSTOMER_DISCOUNT_GROUP>*</CUSTOMER_DISCOUNT_GROUP><TAX_EXEMPT>N</TAX_EXEMPT><TAX_REFERENCE_NUM></TAX_REFERENCE_NUM><Address><CUST_REF_NUM>782377682</CUST_REF_NUM><ADDR_REF_NUM></ADDR_REF_NUM><PRIMARY_IND></PRIMARY_IND><TYPE_CD></TYPE_CD><CONTACT_NAME></CONTACT_NAME><ADDRESS_LINE_1></ADDRESS_LINE_1><ADDRESS_LINE_2></ADDRESS_LINE_2><ADDRESS_LINE_3></ADDRESS_LINE_3><CITY></CITY><COUNTRY></COUNTRY><POSTAL_CODE></POSTAL_CODE><PHONE_NUMBER></PHONE_NUMBER><FAX_NUMBER></FAX_NUMBER><EMAIL_ADDRESS></EMAIL_ADDRESS><ERP_CONTACT_REF_NUM></ERP_CONTACT_REF_NUM><CRM_CONTACT_REF_NUM></CRM_CONTACT_REF_NUM></Address><CUSTOMER_DISCOUNT_GROUP></CUSTOMER_DISCOUNT_GROUP><TAX_EXEMPT></TAX_EXEMPT><TAX_REFERENCE_NUM></TAX_REFERENCE_NUM>
+	
+	'set temp file location for xml string from file and file to string. 
+	f.Intrinsic.String.Build("{0}\{1}C1temp.xml",v.Caller.FilesDir,v.Caller.Terminal,v.Local.sTempFile)
+	
+	'add scripts to save events on master record (Main and CRM) to get a list of customers needing updated based on lastupdate > last run date/time of integration.
+	'this means we create a table and everytime someone presses save, it will add a record with Customer# and date/timestamp of last udpat in ERP and another column for last-sync-date/timestamp
+	'for ship-to addresses, there is a date/timestamp already in the table so we can use that in our logic. 
+	
+	'get new/updated customer list from global shop and stage data in datatables
+	F.Intrinsic.String.Build("Select a.CUSTOMER as ACCOUNT_NUM,a.CUSTOMER as CUST_REF_NUM,a.NAME_CUSTOMER as CUST_NAME,NULL as UDF1,NULL as UDF2,NULL as UDF3,NULL as UDF4,NULL as UDF5,NULL as UDF6,d.SHIP_VIA as UDF7,e.TERMS_MESSAGE as UDF8,NULL as UDF9,NULL as UDF10,'{1}' as PRICE_BOOK from v_CUSTOMER_MASTER a join v_CUSTOMER_SALES b on a.customer = b.customer join v_CUSTOMER_SHIPTO c on a.customer = c.customer join v_AR_SHIP_VIA d on c.SHIP_VIA = d.SHIP_VIA_CODE left join v_AR_TERMS_DESCR e on b.PAYMENT_TERMS = e.TERMS_CODE where a.CUSTOMER = '{0}';",v.Global.sCustomer,v.Global.sDefPriceBook.trim,v.Local.sSQL)
+	
+	f.Data.DataTable.CreateFromSQL("processCustomer","con",v.Local.sSQL,True)
+	
+	f.Intrinsic.Control.If(v.DataTable.processCustomer.RowCount--,=,-1)
+		f.Data.Datatable.Close("processCustomer")
+		v.Local.sError.Set("No Results for Base Query for this customer...")
+		v.Global.sErrorMsg.Set(v.Local.sError)
+		f.Intrinsic.Control.CallSub(LogError)
+		f.Intrinsic.Control.ExitSub
+	f.Intrinsic.Control.EndIf
+	
+	'in the sql above, i have already loaded datatable with UDF colummns and values
+	'udf 7 and 8 are ship via and terms coming from core customer tables, others i want to get separately due to the size of data. DO NOT JOIN on UF_VALUE table. 
+	'below is mapping per Todd in marketing @ maintainer corp.
+	'C1 = GSS
+	
+	'UDF1= User Field 1
+	'UDF2= User Field 2
+	'UDF3= User Field 3
+	'UDF4= User Field 4
+	'UDF5=Dealer field #6
+	'UDF6 = User Field 8  (active or inactive)
+	'UDF7 = Ship VIA 
+	'UDF8 = Tems (Drop down)
+	'UDF9=BLANK FOR NOW (setting up default to use CRM UDF9)
+	'UDF10= BLANK FOR NOW (setting up default to use CRM UDF10)
+	
+	'get the other user defined fields for the customer that are saved via CRM
+	f.Intrinsic.String.Build("Getting UDFs for Customer: {0}",v.Global.sCustomer,v.Local.smsg)
+	
+	f.Intrinsic.UI.ChangeWaitStatus(v.Local.smsg)
+
+	f.Intrinsic.Control.CallSub(getUDFs)
+	
+	'build xml-type variable for SOAP POST
+	f.Data.DataTable.SaveToXML("processCustomer",0,True,v.Local.sTempFile)
+	f.Intrinsic.file.File2String(v.Local.sTempFile,v.Local.sTemp)
+	f.Intrinsic.String.Replace(v.Local.sTemp,"</RECORDSET>","",v.Local.sTemp)
+	f.Intrinsic.String.Instr(v.Local.sTemp,"<PROCESSCUSTOMER>",0,v.Local.iStart)
+	f.Intrinsic.String.Len(v.Local.sTemp,v.Local.iEnd)
+	f.Intrinsic.String.Mid(v.Local.sTemp,v.Local.iStart,v.Local.iEnd,v.Local.sTemp)
+	f.Intrinsic.String.Replace(v.Local.sTemp,"<PROCESSCUSTOMER>","",v.Local.sTemp)
+	f.Intrinsic.String.Replace(v.Local.sTemp,"</PROCESSCUSTOMER>","",v.Local.sTemp)
+	
+	'Get Ship-to data and then come back and append to the main customer info
+	f.Intrinsic.String.Build("Getting Bill-to and Ship-to Addresses for Customer: {0}",v.Global.sCustomer,v.Local.smsg)
+	f.Intrinsic.UI.ChangeWaitStatus(v.Local.smsg)
+	f.Intrinsic.Control.CallSub(getAddressData)
+	
+	f.Intrinsic.String.Build("Building SOAP Packet for Customer: {0}",v.Global.sCustomer,v.Local.smsg)
+	f.Intrinsic.UI.ChangeWaitStatus(v.Local.smsg)
+	'build into same xml Variable
+	f.Data.DataTable.SaveToXML("ADDRESS",0,True,v.Local.sTempFile)
+	f.Intrinsic.file.File2String(v.Local.sTempFile,v.Local.sTempAddress)
+	f.Intrinsic.String.Replace(v.Local.sTempAddress,"</RECORDSET>","",v.Local.sTempAddress)
+	f.Intrinsic.String.Instr(v.Local.sTempAddress,"<ADDRESS>",0,v.Local.iStart)
+	f.Intrinsic.String.Len(v.Local.sTempAddress,v.Local.iEnd)
+	f.Intrinsic.String.Mid(v.Local.sTempAddress,v.Local.iStart,v.Local.iEnd,v.Local.sTempAddress)
+	
+	'append address data to main customer info
+	f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,v.Local.sTempAddress,v.Local.sTemp)
+	f.Intrinsic.String.Replace(v.Local.sTemp,"<ADDRESS>","<Address>",v.Local.sTemp)
+	f.Intrinsic.String.Replace(v.Local.sTemp,"</ADDRESS>","</Address>",v.Local.sTemp)
+	
+	'removing character strings not allowed in soap packet
+	f.Intrinsic.String.build("xml:space={0}preserve{0}",v.Ambient.DblQuote,v.Local.sTemp2)
+	f.Intrinsic.String.Replace(v.Local.sTemp.trim,v.Local.sTemp2,"",v.Local.sTemp)
+	
+	'set params for SOAP
+	Function.Communication.SOAP.SetProperty("LocalFile",V.Local.sFilepath)
+	Function.Communication.SOAP.SetProperty("Accept","gzip,deflate")
+	
+	'Function.Communication.SOAP.SetProperty("User","maintainer_ws")
+	Function.Communication.SOAP.SetProperty("User",v.Global.sUser.Trim)
+	
+	'Function.Communication.SOAP.SetProperty("Password","4GgR7CcfdSVzbQ3k")
+	Function.Communication.SOAP.SetProperty("Password",v.Global.sPW.Trim)
+	
+	'Function.Communication.SOAP.SetProperty("URL","https://maintainer-dev.conceptconfigurator.com/webservices/services/ConceptAccess")
+	Function.Communication.SOAP.SetProperty("URL",v.Global.sURL.Trim)
+	
+	Function.Communication.SOAP.SetPRoperty("Method","processCustomer")
+	
+	f.Communication.SOAP.SetProperty("Timeout","10")
+	
+	'Function.Communication.SOAP.SetPRoperty("MethodURI","http://ws.configureone.com")
+	Function.Communication.SOAP.SetPRoperty("MethodURI",v.Global.sMethURI.Trim)
+	
+	'the in0 is name of the param per C1's web service structures. 
+	Function.Communication.SOAP.ADDPARAM("in0",v.Local.sTemp)
+	Function.Communication.SOAP.BuildPacket
+	
+	f.Intrinsic.String.Build("Posting SOAP Packet for Customer: {0}",v.Global.sCustomer,v.Local.smsg)
+	f.Intrinsic.UI.ChangeWaitStatus(v.Local.smsg)
+	
+	Function.Communication.SOAP.SendPacket
+	
+	f.Intrinsic.UI.Sleep(1)
+	f.Intrinsic.String.Build("Reset SOAP Packet... Last Customer: {0}",v.Global.sCustomer,v.Local.smsg)
+	f.Intrinsic.UI.ChangeWaitStatus(v.Local.smsg)
+	
+	function.Communication.SOAP.Reset()
+	
+	'close and restart
+	f.Data.DataTable.Close("ADDRESS")
+	f.Data.DataTable.Close("processCustomer")
+	
+	f.Intrinsic.String.Build("Verifying ConfigureOne Customer: {0}",v.Global.sCustomer,v.Local.smsg)
+	f.Intrinsic.UI.ChangeWaitStatus(v.Local.smsg)
+	
+	'check for response = True in file
+	f.Intrinsic.File.Exists(v.Local.sFilepath,v.Local.bCheck)
+	f.Intrinsic.Control.If(v.Local.bCheck,=,True)
+		f.Intrinsic.File.File2String(v.Local.sFilepath,v.Local.sTemp)
+		v.Local.iStart.Set(-1)
+		f.Intrinsic.String.Instr(v.Local.sTemp.UCase,"<SUCCESS>TRUE</SUCCESS>",0,v.Local.iStart)
+		f.Intrinsic.Control.If(v.Local.iStart,>,-1)
+			f.Intrinsic.String.Build("ConfigureOne Customer: {0} Updated Successfully",v.Global.sCustomer,v.Local.smsg)
+			f.Intrinsic.UI.ChangeWaitStatus(v.Local.smsg)
+			
+			f.Intrinsic.String.Build("Updating SYNC Record for Customer: {0}",v.Global.sCustomer,v.Local.smsg)
+			f.Intrinsic.UI.ChangeWaitStatus(v.Local.smsg)
+			'update last-sync record for customer. 
+			f.Intrinsic.String.Build("SELECT * from GCG_5826_SYNC where CUSTOMER = '{0}'",v.Global.sCustomer,v.Local.sSQL)
+			f.Data.Datatable.CreateFromSQL("SYNC","con",v.Local.sSQL)
+'			f.Intrinsic.String.Build("CUSTOMER = '{0}'",v.Global.sCustomer,v.Local.sSQL)
+			v.Local.sTemp2.Set("")
+			
+'			f.Data.Datatable.Select("SYNC",v.Local.sSQL,v.Local.sTemp2)
+			f.Intrinsic.Control.If(v.DataTable.SYNC.RowCount--,<>,-1)
+				f.Data.Datatable.SetValue("SYNC",-1,"CUSTOMER",v.Global.sCustomer,"IN_SYNC","Y","LAST_SYNC_DATE",v.Ambient.Date.FormatYYYY-MM-DD)
+				f.Data.Datatable.SaveToDB("SYNC","con","GCG_5826_SYNC","CUSTOMER",2,"CUSTOMER@!@CUSTOMER*!*IN_SYNC@!@IN_SYNC*!*LAST_SYNC_DATE@!@LAST_SYNC_DATE")
+			f.Intrinsic.Control.Else
+				f.Data.Datatable.AddRow("SYNC","CUSTOMER",v.Global.sCustomer,"IN_SYNC","Y","LAST_SYNC_DATE",v.Ambient.Date.FormatYYYY-MM-DD)
+				f.Data.Datatable.SaveToDB("SYNC","con","GCG_5826_SYNC","",128,"CUSTOMER@!@CUSTOMER*!*IN_SYNC@!@IN_SYNC*!*LAST_SYNC_DATE@!@LAST_SYNC_DATE")
+			f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.EndIf
+	
+	F.Intrinsic.Control.ExitSub
+
+'custom error handling in this sub due to web services and logging needed for syncing application
+F.Intrinsic.Control.Catch
+	
+	
+	'create table GCG_5826_Error_Log (
+	'Er_Type char(1), C = Customer Sync error details
+	'Er_Key char(50),
+	'Er_Title char(50),
+	'Er_Details varchar(500),
+	'Er_Date datetime,
+	'Er_User char(50),
+	'Er_Terminal char(3));
+	
+	'read soap response message about fault
+	Function.Communication.SOAP.readproperty("FaultCode",V.Local.sFaultCode)
+	Function.Communication.SOAP.readproperty("FaultString",V.Local.sFaultString)
+	f.Intrinsic.String.Build("Fault Code: {0}{2}Fault String:{1}",v.Local.sFaultCode,v.Local.sFaultString,v.Ambient.NewLine,v.Local.sTemp)
+	
+	F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	
+'log soap error from Soap response if it bombs out.
+f.Intrinsic.Control.If(v.Local.sFaultCode.Trim,<>,"")
+	f.Intrinsic.String.Build("Insert into GCG_5826_Error_Log values ('C','{0}','{1}','{2}','{3}','{4}','{5}')",v.Global.sCustomer,"SoapError",v.Local.sTemp,v.Ambient.Now.PervasiveDate,v.Caller.User,v.Caller.Terminal,v.Local.sSQL)
+	f.ODBC.Connection!con.Execute(v.Local.sSQL)
+	'display message if running from client only
+	f.Intrinsic.Control.If(v.Caller.Hook,<>,38120)
+f.Intrinsic.UI.MsgboxExt("SoapError",v.Local.sTemp)	
+	f.Intrinsic.Control.EndIf
+f.Intrinsic.Control.Else
+	'log general gab error
+	v.Global.sErrorMsg.Set(v.Local.sError)
+	f.Intrinsic.Control.CallSub(LogError,"ErrorMsg")
+f.Intrinsic.Control.EndIf
+	
+	F.Intrinsic.Control.EndIf
+Function.Intrinsic.Control.EndTry
+
+Program.Sub.getCustomerData.End
+
+Program.Sub.getAddressData.Start
+
+F.Intrinsic.Control.SetErrorHandler("Sub_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+'this sub will get the bill-to, ship-to and additional ship-to info for customer in a datatable so we can get the xml exported and merged with the customer data needed. 
+v.Local.sTemp.Declare(String)
+v.Local.sSQL.Declare(String)
+v.Local.i.Declare(Long)
+v.Local.sRet.Declare(String)
+
+'pass global customer variable to get addditional ship-tos first
+f.Intrinsic.String.Build("Select CUSTOMER as CUST_REF_NUM, ltrim(rtrim(CUSTOMER))+SHIP_SEQ as ADDR_REF_NUM,'S' as TYPE_CD,SHIP_ATTENTION as CONTACT_NAME,SHIP_ADDRESS1 as ADDRESS_LINE_1,SHIP_ADDRESS2 as ADDRESS_LINE_2,SHIP_ADDRESS3 as ADDRESS_LINE_3,SHIP_CITY as CITY,SHIP_STATE as STATE,SHIP_COUNTRY as COUNTRY,SHIP_ZIP as POSTAL_CODE,SHIP_TELEPHONE as PHONE_NUMBER,SHIP_FAX as FAX_NUMBER from v_OE_MULTI_SHIP where CUSTOMER = '{0}'",v.Global.sCustomer,v.Local.sSQL)
+f.Data.DataTable.CreateFromSQL("ADDRESS","con",v.Local.sSQL,True)
+
+'get main bill-to adddress
+f.Intrinsic.String.Build("Select a.CUSTOMER,'{0}B00000' as ADDR_REF_NUM, a.ADDRESS1,a.ADDRESS2,b.ADDRESS3,a.CITY,a.STATE,a.ZIP,a.COUNTRY,a.ATTENTION,a.TELEPHONE from v_CUSTOMER_MASTER a join v_CUSTOMER_INTL b on a.CUSTOMER = b.CUSTOMER where a.CUSTOMER = '{0}'",v.Global.sCustomer,v.Local.sSQL)
+f.Data.DataTable.CreateFromSQL("BILLTO","con",v.Local.sSQL)
+'addrow
+f.Data.DataTable.AddRow("ADDRESS","CUST_REF_NUM",v.Global.sCustomer,"ADDR_REF_NUM",v.DataTable.BILLTO(0).ADDR_REF_NUM!FieldValTrim,"TYPE_CD","B","CONTACT_NAME",v.DataTable.BILLTO(0).ATTENTION!FieldValTrim,"ADDRESS_LINE_1",v.DataTable.BILLTO(0).ADDRESS1!FieldValTrim,"ADDRESS_LINE_2",v.DataTable.BILLTO(0).ADDRESS2!FieldValTrim,"ADDRESS_LINE_3",v.DataTable.BILLTO(0).ADDRESS3!FieldValTrim,"CITY",v.DataTable.BILLTO(0).CITY!FieldValTrim,"STATE",v.DataTable.BILLTO(0).STATE!FieldValTrim,"COUNTRY",v.DataTable.BILLTO(0).COUNTRY!FieldValTrim,"POSTAL_CODE",v.DataTable.BILLTO(0).ZIP!FieldValTrim,"PHONE_NUMBER",v.DataTable.BILLTO(0).TELEPHONE!FieldValTrim)
+
+'get main ship-to address
+f.intrinsic.String.Build("Select a.CUSTOMER,'{0}S00000' as ADDR_REF_NUM, a.ADDRESS1_SHIP,a.ADDRESS2_SHIP,b.ADDRESS3_SHIP,a.CITY_SHIP,a.STATE_SHIP,a.CODE_ZIP_SHIP,a.COUNTRY_SHIP,a.ATTENTION_SHIP,a.T_COUNTRY+a.AREA+a.TELE as TELEPHONE from v_CUSTOMER_SHIPTO a join v_CUSTOMER_INTL b on a.CUSTOMER = b.CUSTOMER where a.CUSTOMER = '{0}'",v.Global.sCustomer,v.Local.sSQL)
+f.Data.DataTable.CreateFromSQL("SHIPTO","con",v.Local.sSQL)
+'add row
+f.Data.DataTable.AddRow("ADDRESS","CUST_REF_NUM",v.Global.sCustomer,"ADDR_REF_NUM",v.DataTable.SHIPTO(0).ADDR_REF_NUM!FieldValTrim,"TYPE_CD","S","CONTACT_NAME",v.DataTable.SHIPTO(0).ATTENTION_SHIP!FieldValTrim,"ADDRESS_LINE_1",v.DataTable.SHIPTO(0).ADDRESS1_SHIP!FieldValTrim,"ADDRESS_LINE_2",v.DataTable.SHIPTO(0).ADDRESS2_SHIP!FieldValTrim,"ADDRESS_LINE_3",v.DataTable.SHIPTO(0).ADDRESS3_SHIP!FieldValTrim,"CITY",v.DataTable.SHIPTO(0).CITY_SHIP!FieldValTrim,"STATE",v.DataTable.SHIPTO(0).STATE_SHIP!FieldValTrim,"COUNTRY",v.DataTable.SHIPTO(0).COUNTRY_SHIP!FieldValTrim,"POSTAL_CODE",v.DataTable.SHIPTO(0).CODE_ZIP_SHIP!FieldValTrim,"PHONE_NUMBER",v.DataTable.SHIPTO(0).TELEPHONE!FieldValTrim)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Sub_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	'log general gab error
+	v.Global.sErrorMsg.Set(v.Local.sError)
+	f.Intrinsic.Control.CallSub(LogError,"ErrorMsg")
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.getAddressData.End
+
+Program.Sub.getCustomerList.Start
+F.Intrinsic.Control.SetErrorHandler("getCustomerList_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sSQL.Declare(String)
+v.Local.sRet.Declare(String)
+v.Local.iRet.Declare(Long)
+v.Local.i.Declare(Long)
+
+'first get customers that do NOT exist in table that are active and write the cust# to the table with IN_SYNC = N and 1900 datetime stamp so it will sync. 
+f.Intrinsic.String.Build("select a.CUSTOMER,'N' as IN_SYNC,'1900-01-01' as LAST_SYNC_DATE from v_customer_master a where ltrim(rtrim(a.CUSTOMER)) NOT IN (SELECT ltrim(rtrim(b.CUSTOMER)) FROM GCG_5826_SYNC b);",v.Global.sCustSyncThrshold.Long,v.Local.sSQL)
+f.Data.Datatable.CreateFromSQL("customerNew","con",v.Local.sSQL)
+f.Intrinsic.Control.If(v.DataTable.customerNew.RowCount--,<>,-1)
+	f.Data.Datatable.SaveToDB("customerNew","con","GCG_5826_SYNC","",128,"CUSTOMER@!@CUSTOMER*!*IN_SYNC@!@IN_SYNC*!*LAST_SYNC_DATE@!@LAST_SYNC_DATE")
+	f.Data.Datatable.Close("customerNew")
+f.Intrinsic.Control.EndIf
+
+'this sub is to get entire list of customers that need synced via custom table that stores a boolean and last date/time synced per customer record.
+f.Intrinsic.String.Build("select CUSTOMER from GCG_5826_SYNC  where dateadd(day,{0},LAST_SYNC_DATE) <= now() order by last_sync_date asc, customer asc limit 100",v.Global.sCustSyncThrshold,v.Local.sSQL)
+f.Data.DataTable.CreateFromSQL("customerList","con",v.Local.sSQL,True)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("getCustomerList_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	'log general gab error
+	v.Global.sErrorMsg.Set(v.Local.sError)
+	f.Intrinsic.Control.CallSub(LogError,"ErrorMsg")
+Function.Intrinsic.Control.EndIf
+Program.Sub.getCustomerList.End
+
+Program.Sub.getUDFs.Start
+F.Intrinsic.Control.SetErrorHandler("getUDFs_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+'get the CRM User fields data per customer and set in datatable for processcustomer
+
+'below is mapping per Todd in marketing @ maintainer corp.
+'C1 = GSS
+
+'UDF1= User Field 1
+'UDF2= User Field 2
+'UDF3= User Field 3
+'UDF4= User Field 4
+'UDF5=Dealer field #6
+'UDF6 = User Field 8  (active or inactive)
+'UDF7 = Ship VIA 
+'UDF8 = Tems (Drop down)
+
+v.Local.sSQL.Declare(String)
+v.Local.sTemp.Declare(String)
+v.Local.sRet.declare(String)
+f.Intrinsic.String.Build("select UF1,UF2,UF3,UF4,UF6,UF8,UF9,UF10 from CRM_UF_VALUE where TYPE = 15 and CID is null and OID is null and COMPID = '{0}'",v.Global.sCustomer,v.Local.sSQL)
+f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSQL,v.Local.sRet)
+f.Intrinsic.Control.If(v.Local.sRet,<>,"")
+
+	f.Intrinsic.Control.If(v.DataTable.processCustomer(0).ACCOUNT_NUM!FieldValTrim,=,v.Global.sCustomer.Trim)
+f.Intrinsic.String.Split(v.Local.sRet,"*!*",v.Local.sRet)
+f.Data.Datatable.SetValue("processCustomer",0,"UDF1",v.Local.sRet(0),"UDF2",v.Local.sRet(1),"UDF3",v.Local.sRet(2),"UDF4",v.Local.sRet(3),"UDF5",v.Local.sRet(4),"UDF6",v.Local.sRet(5),"UDF9",v.Local.sRet(6),"UDF10",v.Local.sRet(7))
+f.Data.Datatable.AcceptChanges("processCustomer")
+	f.Intrinsic.Control.EndIf
+f.Intrinsic.Control.EndIf
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("getUDFs_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	'log general gab error
+	v.Global.sErrorMsg.Set(v.Local.sError)
+	f.Intrinsic.Control.CallSub(LogError,"ErrorMsg")
+Function.Intrinsic.Control.EndIf
+Program.Sub.getUDFs.End
+
+Program.Sub.getSettings.Start
+F.Intrinsic.Control.SetErrorHandler("getSettings_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sSQL.Declare(String)
+
+'get settings from custom table. 
+f.Data.Datatable.CreateFromSQL("Settings","con","Select * from GCG_5826_SETTINGS")
+f.Intrinsic.Control.If(v.DataTable.Settings.RowCount--,<>,-1)
+	v.Global.sDefPriceBook.Set(v.DataTable.Settings(0).WS_DEF_PRICE_BOOK.FieldValTrim)
+	v.Global.sMethURI.Set(v.DataTable.Settings(0).WS_METHOD_URI.FieldValTrim)
+	v.Global.sURL.Set(v.DataTable.Settings(0).WS_URL.FieldValTrim)
+	v.Global.sUser.Set(v.DataTable.Settings(0).WS_USER.FieldValTrim)
+	v.Global.sPW.Set(v.DataTable.Settings(0).WS_PASSWORD.FieldValTrim)
+	v.Global.sCustSyncThrshold.Set(v.DataTable.Settings(0).WS_CUST_SYNC_THRSHLD.FieldValLong)
+f.Intrinsic.Control.Else
+	'inform user to setup if no records
+	f.Intrinsic.UI.Msgbox("Configure Settings via System Support > Admin > ConfigureOne/GSS SYNC Settings (5826)","Configure Settings")
+f.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("getSettings_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	'log general gab error
+	v.Global.sErrorMsg.Set(v.Local.sError)
+	f.Intrinsic.Control.CallSub(LogError,"ErrorMsg")
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.getSettings.End
+
+Program.Sub.LogError.Start
+
+v.Local.sSQL.Declare(String)
+
+f.Intrinsic.String.Build("Insert into GCG_5826_Error_Log values ('C','{0}','{1}','{2}','{3}','{4}','{5}')",v.Global.sCustomer,"GABError",v.Global.sErrorMsg,v.Ambient.Now.PervasiveDate,v.Caller.User,v.Caller.Terminal,v.Local.sSQL)
+f.ODBC.Connection!con.Execute(v.Local.sSQL)
+
+'!!! NEED TO ADD Record Cleanup for Error Logs based on Errror date compared to setting stored, might be ok to hardcode to delete if older than 30 days
+
+	'create table GCG_5826_Error_Log (
+	'Er_Type char(1), C = Customer Sync error details
+	'Er_Key char(50),
+	'Er_Title char(50),
+	'Er_Details varchar(500),
+	'Er_Date datetime,
+	'Er_User char(50),
+	'Er_Terminal char(3));
+
+'display message if running from client only
+f.Intrinsic.Control.If(v.Caller.Hook,<>,38120)
+	f.Intrinsic.UI.MsgboxExt("GAB Error",v.Global.sErrorMsg)
+f.Intrinsic.Control.EndIf
+
+Program.Sub.LogError.End
+
+Program.Sub.isRunning.Start
+v.Local.sFile.Declare(String)
+v.Local.bCheck.Declare(Boolean)
+v.Local.bCheck2.Declare(Boolean)
+v.Local.sPID.Declare(String)
+v.Local.iRet.Declare(Long)
+v.Local.dFileDate.Declare(Date)
+v.Local.bIsRunning.Declare(Boolean)
+
+	'track PID and write file to let async program know its running
+	f.Intrinsic.String.Build("{0}\{1}{2}isrunning.txt",v.Caller.FilesDir,v.Caller.Terminal,v.Caller.CompanyCode,v.Local.sFile)
+	v.Global.sPIDFile.Set(v.Local.sFile)
+	f.Intrinsic.File.Exists(v.Local.sFile,v.Local.bCheck)
+	f.Intrinsic.Control.If(v.local.bCheck,=,True)
+		f.Intrinsic.File.GetFileDateTime(v.Local.sfile,v.Local.dFileDate)
+		f.Intrinsic.Date.DateDiff("N",v.Local.dFileDate,v.Ambient.Now,v.Local.iRet)
+		'set file threshold to 5 minutes, since we are limiting to 10 records at a time.
+		f.Intrinsic.Control.If(v.Local.iRet,>,10)
+			'terminate if hung up - this is happening on SOAP POSTS
+			f.Intrinsic.File.File2String(v.Local.sFile,v.Local.sPID)
+			f.Intrinsic.Task.PIDRunning(v.Local.sPID.Long,v.Local.bIsRunning)
+			f.Intrinsic.Control.If(v.Local.bIsRunning,=,True)
+				f.Intrinsic.Task.TerminatePID(v.Local.sPID.Trim)
+			f.Intrinsic.Control.EndIf
+			f.Intrinsic.File.DeleteFile(v.Local.sFile)
+		f.Intrinsic.Control.EndIf
+		'end if program is still running an the isrunning file is not older than the threshold set above.
+		f.Intrinsic.Control.End
+	f.Intrinsic.Control.Else
+		'write file for check every time 38120 hook fires on the OLU set interval
+		f.Intrinsic.File.String2File(v.Local.sFile,v.Ambient.PID)	
+	f.Intrinsic.Control.EndIf
+Program.Sub.isRunning.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$sfulsom$}$20200217090815822$}$fo7rWDFNKJk3z5gGIc6dHlxux2yESRa/mo8LphKdCnBDrrIkEXB3lZZNlUp5idYAGfhdJXs8MA4=
+Program.Sub.Comments.End
