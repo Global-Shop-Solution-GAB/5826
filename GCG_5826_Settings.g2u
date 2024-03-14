@@ -1,0 +1,332 @@
+﻿Program.Sub.ScreenSU.Start
+Gui.Form..Create(BaseForm)
+Gui.Form..Caption("ConfigureOne Settings")
+Gui.Form..Size(292,403)
+Gui.Form..MinX(0)
+Gui.Form..MinY(0)
+Gui.Form..Position(0,0)
+Gui.Form..AlwaysOnTop(False)
+Gui.Form..FontName("Tahoma")
+Gui.Form..FontSize(8.25)
+Gui.Form..ControlBox(True)
+Gui.Form..MaxButton(False)
+Gui.Form..MinButton(False)
+Gui.Form..MousePointer(0)
+Gui.Form..Moveable(True)
+Gui.Form..Sizeable(False)
+Gui.Form..ShowInTaskBar(True)
+Gui.Form..TitleBar(True)
+Gui.Form..Event(UnLoad,Form_UnLoad)
+Gui.Form.frmMain.Create(Frame)
+Gui.Form.frmMain.Enabled(True)
+Gui.Form.frmMain.Visible(True)
+Gui.Form.frmMain.Zorder(0)
+Gui.Form.frmMain.Size(265,204)
+Gui.Form.frmMain.Position(14,15)
+Gui.Form.frmMain.Caption("Main")
+Gui.Form.frmMain.FontName("Tahoma")
+Gui.Form.frmMain.FontSize(8.25)
+Gui.Form.frmMain.BorderStyle(1)
+Gui.Form.txtWS_User.Create(TextBox,"",True,244,20,0,9,51,True,0,"Tahoma",8.25,,1)
+Gui.Form.txtWS_User.MaxLength(100)
+Gui.Form.txtWS_User.Parent("frmMain")
+Gui.Form.lbl1.Create(Label,"User Name",True,52,13,0,9,34,True,0,"Tahoma",8.25,,0,0)
+Gui.Form.lbl1.BorderStyle(0)
+Gui.Form.lbl1.Parent("frmMain")
+Gui.Form.lbl2.Create(Label,"Password",True,46,13,0,9,73,True,0,"Tahoma",8.25,,0,0)
+Gui.Form.lbl2.BorderStyle(0)
+Gui.Form.lbl2.Parent("frmMain")
+Gui.Form.txtWS_Password.Create(TextBox,"",True,246,20,0,9,90,True,0,"Tahoma",8.25,,1)
+Gui.Form.txtWS_Password.MaxLength(100)
+Gui.Form.txtWS_Password.Parent("frmMain")
+Gui.Form.lbl3.Create(Label,"URL",True,19,13,0,9,116,True,0,"Tahoma",8.25,,0,0)
+Gui.Form.lbl3.BorderStyle(0)
+Gui.Form.lbl3.Parent("frmMain")
+Gui.Form.txtWS_URL.Create(TextBox,"",True,245,20,0,9,132,True,0,"Tahoma",8.25,,1)
+Gui.Form.txtWS_URL.MaxLength(255)
+Gui.Form.txtWS_URL.Parent("frmMain")
+Gui.Form.lbl4.Create(Label,"Method URI",True,57,13,0,9,157,True,0,"Tahoma",8.25,,0,0)
+Gui.Form.lbl4.BorderStyle(0)
+Gui.Form.lbl4.Parent("frmMain")
+Gui.Form.txtWS_MethodURI.Create(TextBox,"",True,244,20,0,9,173,True,0,"Tahoma",8.25,,1)
+Gui.Form.txtWS_MethodURI.MaxLength(255)
+Gui.Form.txtWS_MethodURI.Parent("frmMain")
+Gui.Form.frmCust.Create(Frame)
+Gui.Form.frmCust.Enabled(True)
+Gui.Form.frmCust.Visible(True)
+Gui.Form.frmCust.Zorder(0)
+Gui.Form.frmCust.Size(265,103)
+Gui.Form.frmCust.Position(14,230)
+Gui.Form.frmCust.Caption("Customer Master")
+Gui.Form.frmCust.FontName("Tahoma")
+Gui.Form.frmCust.FontSize(8.25)
+Gui.Form.frmCust.BorderStyle(1)
+Gui.Form.lbl5.Create(Label,"Sync Threshold (Days)",True,108,13,0,50,38,True,0,"Tahoma",8.25,,0,0)
+Gui.Form.lbl5.BorderStyle(0)
+Gui.Form.lbl5.Parent("frmCust")
+Gui.Form.txtCustSyncThrshld.Create(TextBox,"",True,33,20,0,11,34,True,0,"Tahoma",8.25,,1)
+Gui.Form.txtCustSyncThrshld.NumericOnly(2)
+Gui.Form.txtCustSyncThrshld.Parent("frmCust")
+Gui.Form.txtDefPriceBook.Create(TextBox,"",True,142,20,0,11,60,True,0,"Tahoma",8.25,,1)
+Gui.Form.txtDefPriceBook.NumericOnly(2)
+Gui.Form.txtDefPriceBook.Parent("frmCust")
+Gui.Form.lbl6.Create(Label,"Default Price Book ID",True,101,13,0,157,64,True,0,"Tahoma",8.25,,0,0)
+Gui.Form.lbl6.BorderStyle(0)
+Gui.Form.lbl6.Parent("frmCust")
+Gui.Form.cmdSave.Create(Button)
+Gui.Form.cmdSave.Enabled(True)
+Gui.Form.cmdSave.Visible(True)
+Gui.Form.cmdSave.Zorder(0)
+Gui.Form.cmdSave.Size(75,23)
+Gui.Form.cmdSave.Position(14,337)
+Gui.Form.cmdSave.Caption("Save")
+Gui.Form.cmdSave.FontName("Tahoma")
+Gui.Form.cmdSave.FontSize(8.25)
+Gui.Form.cmdSave.Event(Click,cmdSave_Click)
+Gui.Form.cmdLogs.Create(Button)
+Gui.Form.cmdLogs.Enabled(True)
+Gui.Form.cmdLogs.Visible(True)
+Gui.Form.cmdLogs.Zorder(0)
+Gui.Form.cmdLogs.Size(75,23)
+Gui.Form.cmdLogs.Position(204,340)
+Gui.Form.cmdLogs.Caption("Logs")
+Gui.Form.cmdLogs.FontName("Tahoma")
+Gui.Form.cmdLogs.FontSize(8.25)
+Gui.Form.cmdLogs.Event(Click,cmdLogs_Click)
+Gui.Form2..Create(BaseForm)
+Gui.Form2..Caption("GSS <-> ConfigureOne Sync Error Logs")
+Gui.Form2..Size(866,412)
+Gui.Form2..MinX(0)
+Gui.Form2..MinY(0)
+Gui.Form2..Position(0,0)
+Gui.Form2..AlwaysOnTop(False)
+Gui.Form2..FontName("Tahoma")
+Gui.Form2..FontSize(8.25)
+Gui.Form2..ControlBox(True)
+Gui.Form2..MaxButton(True)
+Gui.Form2..MinButton(True)
+Gui.Form2..MousePointer(0)
+Gui.Form2..Moveable(True)
+Gui.Form2..Sizeable(True)
+Gui.Form2..ShowInTaskBar(True)
+Gui.Form2..TitleBar(True)
+Gui.Form2..Event(UnLoad,Form2_UnLoad)
+Gui.Form2.GsGridControl1.Create(GsGridControl)
+Gui.Form2.GsGridControl1.Enabled(True)
+Gui.Form2.GsGridControl1.Visible(True)
+Gui.Form2.GsGridControl1.Zorder(0)
+Gui.Form2.GsGridControl1.Size(838,333)
+Gui.Form2.GsGridControl1.Position(15,37)
+Gui.Form2.GsGridControl1.Anchor(15)
+Gui.Form2.cmdClearLogs.Create(Button)
+Gui.Form2.cmdClearLogs.Enabled(True)
+Gui.Form2.cmdClearLogs.Visible(True)
+Gui.Form2.cmdClearLogs.Zorder(0)
+Gui.Form2.cmdClearLogs.Size(75,23)
+Gui.Form2.cmdClearLogs.Position(16,7)
+Gui.Form2.cmdClearLogs.Caption("Clear All Logs")
+Gui.Form2.cmdClearLogs.FontName("Tahoma")
+Gui.Form2.cmdClearLogs.FontSize(8.25)
+Gui.Form2.cmdClearLogs.Event(Click,cmdClearLogs_Click)
+Gui.Form2.cmdExpLogs.Create(Button)
+Gui.Form2.cmdExpLogs.Enabled(True)
+Gui.Form2.cmdExpLogs.Visible(True)
+Gui.Form2.cmdExpLogs.Zorder(0)
+Gui.Form2.cmdExpLogs.Size(75,23)
+Gui.Form2.cmdExpLogs.Position(99,7)
+Gui.Form2.cmdExpLogs.Caption("Export")
+Gui.Form2.cmdExpLogs.FontName("Tahoma")
+Gui.Form2.cmdExpLogs.FontSize(8.25)
+Gui.Form2.cmdExpLogs.Event(Click,cmdExpLogs_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+Function.Intrinsic.UI.UsePixels ' Allows you to use Pixels instead of Twips throughout
+
+'ARC 5826 coded for Maintainer Corp. this admin program stores credentials and some basic settings for the customer master sync program.
+'coded BY SFF 2/4/2020
+f.ODBC.Connection!con.OpenCompanyConnection
+
+f.Intrinsic.Control.CallSub(InitializeForm)
+'show form and set to first txtbox in main
+gui.Form..Show
+gui.Form.txtWS_User.SetFocus
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.Main.End
+Program.Sub.Form_UnLoad.Start
+'end
+f.Intrinsic.Control.End
+Program.Sub.Form_UnLoad.End
+Program.Sub.cmdSave_Click.Start
+F.Intrinsic.Control.SetErrorHandler("cmdSave_Click_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sTemp.Declare(String)
+
+'save items on screen
+f.Data.Datatable.SetValue("Settings",0,"WS_USER",v.Screen.Form!txtWS_User.Text,"WS_PASSWORD",v.Screen.Form!txtWS_Password.Text,"WS_URL",v.Screen.form!txtWS_URL.Text,"WS_METHOD_URI",v.Screen.Form!txtWS_MethodURI.Text,"WS_CUST_SYNC_THRSHLD",v.Screen.Form!txtCustSyncThrshld.Text,"WS_DEF_PRICE_BOOK",v.Screen.Form!txtDefPriceBook.Text)
+'save to Custom settings table
+
+f.ODBC.Connection!con.Execute("Delete from GCG_5826_SETTINGS")
+f.Data.Datatable.SaveToDB("Settings","con","GCG_5826_SETTINGS","WS_USER*!*WS_PASSWORD*!*WS_URL*!*WS_METHOD_URI*!*WS_CUST_SYNC_THRSHLD*!*WS_DEF_PRICE_BOOK",256)
+
+f.Intrinsic.Control.End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("cmdSave_Click_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.cmdSave_Click.End
+Program.Sub.InitializeForm.Start
+F.Intrinsic.Control.SetErrorHandler("InitializeForm_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sTemp.Declare(String)
+
+'this saves data from screen to settings custom table for ARC 5826
+f.Data.Datatable.CreateFromSQL("Settings","con","Select * from GCG_5826_SETTINGS",True)
+
+f.Intrinsic.Control.If(v.DataTable.Settings.rowcount--,<>,-1)
+	gui.Form.txtWS_User.Text(v.DataTable.Settings(0).WS_USER.FieldValTrim)
+	gui.Form.txtWS_Password.Text(v.DataTable.Settings(0).WS_PASSWORD.FieldValTrim)
+	gui.Form.txtWS_URL.Text(v.DataTable.Settings(0).WS_URL.FieldValTrim)
+	gui.Form.txtWS_MethodURI.Text(v.DataTable.Settings(0).WS_METHOD_URI.FieldValTrim)
+	gui.Form.txtCustSyncThrshld.Text(v.DataTable.Settings(0).WS_CUST_SYNC_THRSHLD.FieldVal)
+	gui.Form.txtDefPriceBook.Text(v.DataTable.Settings(0).WS_DEF_PRICE_BOOK.FieldValTrim)
+f.Intrinsic.Control.Else
+	f.Data.Datatable.AddRow("Settings")
+f.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("InitializeForm_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.InitializeForm.End
+Program.Sub.cmdLogs_Click.Start
+F.Intrinsic.Control.SetErrorHandler("cmdLogs_Click_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+'get data for form to load
+f.Intrinsic.Control.CallSub(loadlogs)
+
+'show form for logs.
+gui.Form2..Show
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("cmdLogs_Click_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.cmdLogs_Click.End
+Program.Sub.cmdClearLogs_Click.Start
+F.Intrinsic.Control.SetErrorHandler("cmdClearLogs_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sSQL.Declare(String)
+
+'clear.
+f.ODBC.Connection!con.Execute("Delete from GCG_5826_ERROR_LOG")
+f.Intrinsic.Control.CallSub(loadlogs)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("cmdClearLogs_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.cmdClearLogs_Click.End
+Program.Sub.Form2_UnLoad.Start
+gui.Form2..Visible(false)
+Program.Sub.Form2_UnLoad.End
+
+Program.Sub.loadlogs.Start
+F.Intrinsic.Control.SetErrorHandler("loadlogs_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sSQL.Declare(String)
+
+'get records and load
+v.Local.sSQL.Set("Select * from GCG_5826_ERROR_LOG")
+f.Data.Datatable.CreateFromSQL("Logs","con",v.Local.sSQL)
+gui.Form2.GsGridControl1.DataSource("Logs")
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("loadlogs_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.loadlogs.End
+Program.Sub.cmdExpLogs_Click.Start
+F.Intrinsic.Control.SetErrorHandler("cmdExpLogs_Click_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sFile.Declare(string)
+v.Local.bCheck.Declare(Boolean)
+
+'if msexcel installed then create xls file, if not then create CSV. 
+f.Automation.MSExcel.CheckPresence(v.Local.bCheck)
+f.Intrinsic.Control.If(v.Local.bCheck,=,True)
+	'write xls file
+	f.Intrinsic.String.Build("{0}\GCG_5826_Error_Log.xls",v.System.Temp,v.Local.sFile)
+	
+	gui.Form2.GsGridControl1.Export(v.Local.sFile,"xls")
+f.Intrinsic.Control.Else
+	'create csv instead
+	f.Intrinsic.String.Build("{0}\GCG_5826_Error_Log.csv",v.System.Temp,v.Local.sFile)
+	gui.Form2.GsGridControl1.Export(v.Local.sFile,"csv")
+f.Intrinsic.Control.EndIf
+
+'launch log file
+f.Intrinsic.File.Exists(v.Local.sFile,v.Local.bCheck)
+f.Intrinsic.Control.If(v.Local.bCheck,=,True)
+	f.Intrinsic.Task.ShellExec(v.Caller.Handle,"OPEN",v.Local.sFile,"","",0)
+f.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("cmdExpLogs_Click_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.cmdExpLogs_Click.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$sfulsom$}$20200213091823054$}$fo7rWDFNKJk3z5gGIc6dHlxux2yESRa/mo8LphKdCnCpPeE5kLEAGN3VgCHeDtTiM0BtOuw3eVA=
+Program.Sub.Comments.End
